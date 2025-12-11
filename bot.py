@@ -25,6 +25,13 @@ def load_responses():
     except FileNotFoundError:
         return ["错误：找不到 responses.json 文件！"]
 
+def load_fortunes():
+    try:
+        with open('fortunes.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return ["错误：找不到 fortunes.json 文件！"]
+
 @bot.event
 async def on_ready():
     print(f'RaalmBot 已上线: {bot.user} (ID: {bot.user.id})')
@@ -41,6 +48,15 @@ async def wsnd(interaction: discord.Interaction):
     # 随机选择
     selected = random.choice(options)
     # 发送
+    await interaction.response.send_message(selected)
+
+# --- 3.1 创建 /抽一签 指令 ---
+@bot.tree.command(name="抽一签", description="想你了m萨")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def draw_lot(interaction: discord.Interaction):
+    fortunes = load_fortunes()
+    selected = random.choice(fortunes)
     await interaction.response.send_message(selected)
 
 # --- 4. 同步指令 (管理员专用) ---
