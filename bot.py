@@ -51,7 +51,7 @@ async def wsnd(interaction: discord.Interaction):
     await interaction.response.send_message(selected)
 
 # --- 3.1 创建 /抽一签 指令 ---
-@bot.tree.command(name="抽一签", description="随机抽取一支灵签")
+@bot.tree.command(name="抽一签", description="想你了m萨")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def draw_lot(interaction: discord.Interaction):
