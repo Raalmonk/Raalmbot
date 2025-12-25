@@ -145,52 +145,50 @@ async def check_rmp_updates():
 
     print("Checking for new RMP reviews...")
     try:
-        # Fetch reviews (getting a few more to be safe)
-        fetched_reviews = rmp_helper.get_reviews(count=20)
-        if not fetched_reviews:
-            print("No reviews found or error fetching.")
-            return
-
         professor_details = rmp_helper.get_professor_details()
         if not professor_details:
              print("Could not fetch professor details for embed.")
              return
 
+        # Dynamic count based on total ratings + buffer
+        total_ratings = professor_details.get("numRatings", 20)
+        count_to_fetch = total_ratings + 5
+
+        fetched_reviews = rmp_helper.get_reviews(count=count_to_fetch)
+        if not fetched_reviews:
+            print("No reviews found or error fetching.")
+            return
+
         seen_ids = set(config.get("seen_reviews", []))
-        new_reviews = []
 
         # Determine if this is a "Backfill" (First run / no cache)
         is_backfill = len(seen_ids) == 0
 
-        # Sort fetched reviews by date (newest first usually, but let's process carefully)
-        # We want to post oldest to newest if we are backfilling, or just new ones.
-        # But RMP returns newest first.
-
-        # Identify new reviews
         reviews_to_post = []
-        for review in fetched_reviews:
-            rid = review["id"]
-            if rid not in seen_ids:
-                reviews_to_post.append(review)
 
-        if not reviews_to_post:
-            print("No new reviews.")
-            return
-
-        # If backfill, user requested "last 5-10 reviews".
+        # Filter new reviews
         if is_backfill:
-            print("First run detected. Backfilling history...")
+            # If backfill, user wants ALL history.
+            print("First run detected. Backfilling FULL history...")
+            reviews_to_post = fetched_reviews
+            # Reverse to post Oldest -> Newest
+            reviews_to_post.reverse()
 
-            # Mark ALL fetched reviews as seen to prevent re-posting history later
+            # Mark all as seen
             for review in fetched_reviews:
                  if review["id"] not in config["seen_reviews"]:
                      config["seen_reviews"].append(review["id"])
-
-            # But only post the latest 5
-            reviews_to_post = fetched_reviews[:5]
-            reviews_to_post.reverse()
-
         else:
+            # Identify new reviews only
+            for review in fetched_reviews:
+                rid = review["id"]
+                if rid not in seen_ids:
+                    reviews_to_post.append(review)
+
+            if not reviews_to_post:
+                print("No new reviews.")
+                return
+
             # Not backfill, just new updates.
             # RMP returns [Newest, ..., Oldest].
             # If we have new reviews [New1, New2], we should post New2 then New1
@@ -297,6 +295,15 @@ async def set_rmp_channel(ctx):
     config["rmp_channel_id"] = ctx.channel.id
     save_config(config)
     await ctx.send(f"RateMyProfessor updates will now be posted to {ctx.channel.mention}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def force_rmp_check(ctx):
+    """Manually triggers the RateMyProfessor update check."""
+    await ctx.send("Manually triggering RMP update check...")
+    # We call the loop function manually.
+    # Note: Calling the task function directly works as a coroutine.
+    await check_rmp_updates()
 
 @bot.command()
 async def sync(ctx):
