@@ -109,10 +109,13 @@ async def post_review(channel, review, professor_name):
 
     try:
         await channel.send(embed=embed)
+        return True
     except discord.Forbidden:
         logger.error(f"Failed to send message to channel {channel.id}: Forbidden")
+        return False
     except Exception as e:
         logger.error(f"Failed to send message: {e}")
+        return False
 
 @tasks.loop(minutes=10)
 async def check_rmp_updates():
@@ -152,11 +155,12 @@ async def check_rmp_updates():
             rid = review.get('id')
             if rid not in rmp_config['seen_reviews']:
                 logger.info(f"New review found: {rid}")
-                await post_review(channel, review, prof_name)
-                rmp_config['seen_reviews'].append(rid)
-                new_reviews_found = True
-                # Add a small delay to avoid rate limits or spamming
-                await asyncio.sleep(1)
+                success = await post_review(channel, review, prof_name)
+                if success:
+                    rmp_config['seen_reviews'].append(rid)
+                    new_reviews_found = True
+                    # Add a small delay to avoid rate limits or spamming
+                    await asyncio.sleep(1)
 
         if new_reviews_found:
             save_config()
