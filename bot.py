@@ -129,13 +129,13 @@ def create_review_embed(review, professor_details, title_prefix=""):
 
 # --- Background Task ---
 
-@tasks.loop(hours=1)
+@tasks.loop(minutes=10)
 async def check_rmp_updates():
     config = load_config()
     channel_id = config.get("rmp_channel_id")
 
     if not channel_id:
-        print("RMP Loop: No channel ID set. Use /set_rmp_channel to set it.")
+        print("RMP Loop: No channel ID set. Use /rmsanrr to start auto-fetch.")
         return
 
     channel = bot.get_channel(channel_id)
@@ -245,56 +245,44 @@ async def draw_lot(interaction: discord.Interaction):
 
 # --- RMP Commands ---
 
-@bot.tree.command(name="rmsanrr", description="Show Professor Liu's Stats and Latest Review")
+@bot.tree.command(name="rmsanrr", description="Start auto-fetching reviews for Professor Liu (Backfills History)")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def rmsanrr(interaction: discord.Interaction):
+    # This command now starts the process
+    # 1. Sets the channel
+    # 2. Clears seen_reviews (to force backfill)
+    # 3. Restarts the background loop
+
     await interaction.response.defer()
 
-    try:
-        prof = rmp_helper.get_professor_details()
-        reviews = rmp_helper.get_reviews(count=1)
-
-        if not prof:
-            await interaction.followup.send("Error: Could not fetch professor details.")
-            return
-
-        # Create Summary Embed
-        summary_embed = discord.Embed(
-            title=f"Professor {prof['firstName']} {prof['lastName']}",
-            description=f"**Department:** {prof['department']}\n**School:** {prof['school']['name']}",
-            color=discord.Color.green()
-        )
-        summary_embed.add_field(name="Avg Quality", value=f"{prof['avgRating']}/5.0", inline=True)
-        summary_embed.add_field(name="Avg Difficulty", value=f"{prof['avgDifficulty']}/5.0", inline=True)
-        summary_embed.add_field(name="Total Ratings", value=f"{prof['numRatings']}", inline=True)
-
-        take_again = prof['wouldTakeAgainPercent']
-        take_again_str = f"{take_again}%" if take_again is not None and take_again >= 0 else "N/A"
-        summary_embed.add_field(name="Would Take Again", value=take_again_str, inline=True)
-
-        summary_embed.set_thumbnail(url="https://www.ratemyprofessors.com/static/media/no-portrait.00000000.svg") # Generic placeholder
-
-        embeds = [summary_embed]
-
-        if reviews:
-            latest_review = reviews[0]
-            review_embed = create_review_embed(latest_review, prof, title_prefix="[Latest] ")
-            embeds.append(review_embed)
-
-        await interaction.followup.send(embeds=embeds)
-
-    except Exception as e:
-        await interaction.followup.send(f"An error occurred: {e}")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def set_rmp_channel(ctx):
-    """Sets the current channel for RMP auto-updates."""
     config = load_config()
-    config["rmp_channel_id"] = ctx.channel.id
+    config["rmp_channel_id"] = interaction.channel_id
+    config["seen_reviews"] = [] # Force backfill
     save_config(config)
-    await ctx.send(f"RateMyProfessor updates will now be posted to {ctx.channel.mention}")
+
+    await interaction.followup.send("Starting auto-fetch for Pengyuan Liu... (Fetching history now)")
+
+    # Restart the loop to trigger immediately
+    if check_rmp_updates.is_running():
+        check_rmp_updates.restart()
+    else:
+        check_rmp_updates.start()
+
+@bot.tree.command(name="byebyesanrr", description="Stop auto-fetching reviews for Professor Liu")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def byebyesanrr(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    config = load_config()
+    config["rmp_channel_id"] = None
+    save_config(config)
+
+    await interaction.followup.send("Stopped auto-fetch for Pengyuan Liu.")
+    # We don't necessarily need to stop the loop object, just set config to None (it handles it).
+    # But we can cancel it if we want to save resources.
+    # Let's keep it running but idling as per loop logic.
 
 @bot.command()
 @commands.has_permissions(administrator=True)
